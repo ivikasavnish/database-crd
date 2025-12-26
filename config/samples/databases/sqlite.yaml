@@ -1,0 +1,25 @@
+apiVersion: databases.database-operator.io/v1alpha1
+kind: Database
+metadata:
+  name: sqlite-sample
+  namespace: default
+spec:
+  type: SQLite
+  version: "latest"
+  replicas: 1
+  storage:
+    size: 1Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+  resources:
+    cpu: 100m
+    memory: 128Mi
+    cpuLimit: 500m
+    memoryLimit: 512Mi
+  sqlite:
+    databaseFile: /data/app.db
+    parameters:
+      journal_mode: "WAL"
+  env:
+    - name: SQLITE_DATABASE
+      value: /data/app.db

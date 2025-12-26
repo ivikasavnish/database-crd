@@ -1,0 +1,29 @@
+apiVersion: databases.database-operator.io/v1alpha1
+kind: Database
+metadata:
+  name: elasticsearch-sample
+  namespace: default
+spec:
+  type: Elasticsearch
+  version: "8.11.0"
+  replicas: 3
+  storage:
+    size: 50Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+  resources:
+    cpu: 2000m
+    memory: 4Gi
+    cpuLimit: 4000m
+    memoryLimit: 8Gi
+  elasticsearch:
+    clusterName: my-elasticsearch
+    nodeRoles:
+      - master
+      - data
+      - ingest
+    parameters:
+      node.name: "elasticsearch"
+  env:
+    - name: ES_JAVA_OPTS
+      value: "-Xms2g -Xmx2g"

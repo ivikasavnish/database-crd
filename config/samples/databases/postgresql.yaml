@@ -1,0 +1,30 @@
+apiVersion: databases.database-operator.io/v1alpha1
+kind: Database
+metadata:
+  name: postgresql-sample
+  namespace: default
+spec:
+  type: PostgreSQL
+  version: "16"
+  replicas: 1
+  storage:
+    size: 10Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+  resources:
+    cpu: 500m
+    memory: 1Gi
+    cpuLimit: 1000m
+    memoryLimit: 2Gi
+  postgresql:
+    database: myapp
+    username: appuser
+    passwordSecret:
+      name: postgresql-secret
+      key: password
+    parameters:
+      max_connections: "100"
+      shared_buffers: "256MB"
+  env:
+    - name: POSTGRES_INITDB_ARGS
+      value: "--encoding=UTF8 --locale=en_US.utf8"
