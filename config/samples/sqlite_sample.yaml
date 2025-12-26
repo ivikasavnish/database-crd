@@ -1,0 +1,36 @@
+apiVersion: db.platform.io/v1
+kind: Database
+metadata:
+  name: sqlite-sample
+  namespace: default
+spec:
+  engine: SQLite
+  version: "3.0"
+  profile: dev
+  
+  # SQLite must have replicas: 1 (validation will fail if > 1)
+  topology:
+    mode: Standalone
+    replicas: 1
+  
+  storage:
+    size: 5Gi
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+  
+  networking:
+    serviceType: ClusterIP
+  
+  lifecycle:
+    deletionPolicy: Delete
+    paused: false
+  
+  engineConfig:
+    journal_mode: "WAL"
+    synchronous: "NORMAL"

@@ -1,0 +1,59 @@
+apiVersion: db.platform.io/v1
+kind: Database
+metadata:
+  name: elasticsearch-sample
+  namespace: default
+spec:
+  engine: Elasticsearch
+  version: "8.11"
+  profile: prod
+  
+  # Elasticsearch requires at least 3 nodes (validation will fail for Standalone)
+  topology:
+    mode: Cluster
+    replicas: 3
+    antiAffinity: true
+  
+  storage:
+    storageClassName: fast-ssd
+    size: 200Gi
+  
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2000m"
+    limits:
+      memory: "8Gi"
+      cpu: "4000m"
+  
+  networking:
+    serviceType: ClusterIP
+    port: 9200
+    tls:
+      enabled: true
+      certManager: true
+  
+  backup:
+    enabled: true
+    schedule: "0 1 * * *"
+    method: Snapshot
+    retention: 30
+    destination:
+      s3:
+        bucket: elasticsearch-backups
+        region: us-west-2
+        credentialsSecret: aws-credentials
+  
+  observability:
+    metrics:
+      enabled: true
+      serviceMonitor: true
+      port: 9114
+  
+  lifecycle:
+    deletionPolicy: Snapshot
+  
+  engineConfig:
+    cluster.name: "my-elasticsearch"
+    discovery.type: "zen"
+    bootstrap.memory_lock: "true"
