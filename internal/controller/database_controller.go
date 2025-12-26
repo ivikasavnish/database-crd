@@ -874,9 +874,13 @@ func (r *DatabaseReconciler) createElasticsearchStatefulSet(database *databasesv
 func (r *DatabaseReconciler) createSQLiteDeployment(database *databasesv1alpha1.Database, replicas int32, env []corev1.EnvVar) *appsv1.Deployment {
 	labels := r.getLabels(database)
 
+	// For SQLite, use the version specified by the user
+	// This allows flexibility for testing with "latest" or pinning to a specific version
+	image := fmt.Sprintf("nouchka/sqlite3:%s", database.Spec.Version)
+
 	container := corev1.Container{
 		Name:  "sqlite",
-		Image: "nouchka/sqlite3:latest",
+		Image: image,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
