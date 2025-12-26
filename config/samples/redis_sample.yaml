@@ -1,0 +1,39 @@
+apiVersion: db.platform.io/v1
+kind: Database
+metadata:
+  name: redis-sample
+  namespace: default
+spec:
+  engine: Redis
+  version: "7.2"
+  profile: default
+  
+  topology:
+    mode: Cluster
+    replicas: 6
+    shards: 3
+  
+  storage:
+    storageClassName: fast-ssd
+    size: 20Gi
+  
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  
+  networking:
+    serviceType: ClusterIP
+    port: 6379
+  
+  backup:
+    enabled: true
+    schedule: "0 4 * * *"
+    method: Snapshot
+    retention: 3
+  
+  lifecycle:
+    deletionPolicy: Delete
