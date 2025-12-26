@@ -1,0 +1,30 @@
+apiVersion: databases.database-operator.io/v1alpha1
+kind: Database
+metadata:
+  name: mongodb-sample
+  namespace: default
+spec:
+  type: MongoDB
+  version: "7.0"
+  replicas: 3
+  storage:
+    size: 20Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+  resources:
+    cpu: 1000m
+    memory: 2Gi
+    cpuLimit: 2000m
+    memoryLimit: 4Gi
+  mongodb:
+    database: myapp
+    username: appuser
+    passwordSecret:
+      name: mongodb-secret
+      key: password
+    replicaSetName: rs0
+    parameters:
+      cacheSizeGB: "1"
+  env:
+    - name: MONGO_INITDB_DATABASE
+      value: myapp

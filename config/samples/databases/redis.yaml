@@ -1,0 +1,29 @@
+apiVersion: databases.database-operator.io/v1alpha1
+kind: Database
+metadata:
+  name: redis-sample
+  namespace: default
+spec:
+  type: Redis
+  version: "7.2"
+  replicas: 1
+  storage:
+    size: 5Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+  resources:
+    cpu: 500m
+    memory: 512Mi
+    cpuLimit: 1000m
+    memoryLimit: 1Gi
+  redis:
+    mode: standalone
+    passwordSecret:
+      name: redis-secret
+      key: password
+    parameters:
+      maxmemory: "256mb"
+      maxmemory-policy: "allkeys-lru"
+  env:
+    - name: REDIS_REPLICATION_MODE
+      value: master
