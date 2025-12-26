@@ -46,12 +46,20 @@ var _ = Describe("Database Controller", func() {
 			By("creating the custom resource for the Kind Database")
 			err := k8sClient.Get(ctx, typeNamespacedName, database)
 			if err != nil && errors.IsNotFound(err) {
+				replicas := int32(1)
 				resource := &databasesv1alpha1.Database{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: databasesv1alpha1.DatabaseSpec{
+						Type:     databasesv1alpha1.DatabaseTypePostgreSQL,
+						Version:  "16",
+						Replicas: &replicas,
+						Storage: &databasesv1alpha1.StorageSpec{
+							Size: "1Gi",
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

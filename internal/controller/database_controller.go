@@ -87,9 +87,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if !database.ObjectMeta.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(database, databaseFinalizer) {
 			// Perform cleanup
-			if err := r.finalizeDatabase(ctx, database); err != nil {
-				return ctrl.Result{}, err
-			}
+			r.finalizeDatabase(ctx, database)
 
 			// Remove finalizer
 			controllerutil.RemoveFinalizer(database, databaseFinalizer)
@@ -962,11 +960,12 @@ func (r *DatabaseReconciler) buildResourceRequirements(resources *databasesv1alp
 	return requirements
 }
 
-func (r *DatabaseReconciler) finalizeDatabase(ctx context.Context, database *databasesv1alpha1.Database) error {
+func (r *DatabaseReconciler) finalizeDatabase(ctx context.Context, database *databasesv1alpha1.Database) {
 	log := log.FromContext(ctx)
 	log.Info("Finalizing database", "name", database.Name)
 	// Perform cleanup if needed
-	return nil
+	// Kubernetes garbage collection will automatically clean up owned resources
+	// (StatefulSets, Deployments, Services) due to controller references
 }
 
 func (r *DatabaseReconciler) updateStatusOnError(ctx context.Context, database *databasesv1alpha1.Database, err error) {
