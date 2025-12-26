@@ -1,0 +1,38 @@
+apiVersion: db.platform.io/v1
+kind: Database
+metadata:
+  name: mongodb-sample
+  namespace: default
+spec:
+  engine: MongoDB
+  version: "7.0"
+  profile: prod
+  
+  topology:
+    mode: Replicated
+    replicas: 3
+  
+  storage:
+    storageClassName: fast-ssd
+    size: 100Gi
+  
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2000m"
+    limits:
+      memory: "8Gi"
+      cpu: "4000m"
+  
+  networking:
+    serviceType: ClusterIP
+    port: 27017
+  
+  backup:
+    enabled: true
+    schedule: "0 3 * * *"
+    method: Dump
+    retention: 14
+  
+  lifecycle:
+    deletionPolicy: Retain

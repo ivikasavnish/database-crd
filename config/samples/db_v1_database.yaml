@@ -1,0 +1,83 @@
+apiVersion: db.platform.io/v1
+kind: Database
+metadata:
+  name: postgres-sample
+  namespace: default
+spec:
+  engine: PostgreSQL
+  version: "15.0"
+  profile: prod
+  
+  topology:
+    mode: Replicated
+    replicas: 3
+    antiAffinity: true
+  
+  storage:
+    storageClassName: fast-ssd
+    size: 50Gi
+    snapshots: true
+  
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+  
+  networking:
+    serviceType: ClusterIP
+    port: 5432
+    tls:
+      enabled: true
+      certManager: true
+  
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    method: Snapshot
+    retention: 7
+    destination:
+      s3:
+        bucket: my-backups
+        region: us-east-1
+        credentialsSecret: aws-credentials
+  
+  auth:
+    consul:
+      enabled: true
+      address: consul.default.svc.cluster.local:8500
+      path: database/credentials/postgres-sample
+      tokenSecretRef:
+        name: consul-token
+        key: token
+    rotationPolicy:
+      enabled: true
+      schedule: "0 0 1 * *"
+      strategy: TwoPhase
+  
+  maintenance:
+    windows:
+      - dayOfWeek: 0
+        startTime: "02:00"
+        duration: 4h
+    autoUpgrade: false
+  
+  observability:
+    metrics:
+      enabled: true
+      serviceMonitor: true
+      port: 9187
+    logging:
+      level: info
+      format: json
+  
+  lifecycle:
+    paused: false
+    deletionPolicy: Snapshot
+  
+  engineConfig:
+    max_connections: "200"
+    shared_buffers: "256MB"
+    effective_cache_size: "1GB"
