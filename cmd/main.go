@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -86,12 +85,14 @@ type DatabaseInfo struct {
 // mechanism. In production, ensure proper RBAC is configured and TLS is enabled.
 func setupUsageEndpoint(mgr ctrl.Manager) error {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.Background()
+		// Use request context to respect client cancellation and timeouts
+		ctx := r.Context()
 
 		// Fetch all databases across all namespaces
 		var databaseList databasesv1alpha1.DatabaseList
 		if err := mgr.GetClient().List(ctx, &databaseList, &client.ListOptions{}); err != nil {
-			http.Error(w, "Failed to list databases", http.StatusInternalServerError)
+			setupLog.Error(err, "Failed to list databases for usage endpoint")
+			http.Error(w, "Failed to retrieve database statistics", http.StatusInternalServerError)
 			return
 		}
 
