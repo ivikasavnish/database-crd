@@ -46,6 +46,10 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	defaultReplicas = 1 // Default number of replicas for databases
+)
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -77,12 +81,14 @@ type DatabaseInfo struct {
 	Ready     int32  `json:"ready"`
 }
 
-// setupUsageEndpoint sets up an HTTP endpoint to expose database usage statistics
+// setupUsageEndpoint sets up an HTTP endpoint to expose database usage statistics.
+// This endpoint is secured by the metrics server's authentication and authorization
+// mechanism. In production, ensure proper RBAC is configured and TLS is enabled.
 func setupUsageEndpoint(mgr ctrl.Manager) error {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
 
-		// Fetch all databases
+		// Fetch all databases across all namespaces
 		var databaseList databasesv1alpha1.DatabaseList
 		if err := mgr.GetClient().List(ctx, &databaseList, &client.ListOptions{}); err != nil {
 			http.Error(w, "Failed to list databases", http.StatusInternalServerError)
@@ -105,7 +111,7 @@ func setupUsageEndpoint(mgr ctrl.Manager) error {
 			stats.ByPhase[string(db.Status.Phase)]++
 
 			// Add database info
-			replicas := int32(1)
+			replicas := int32(defaultReplicas)
 			if db.Spec.Replicas != nil {
 				replicas = *db.Spec.Replicas
 			}

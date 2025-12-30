@@ -1020,12 +1020,15 @@ func (r *DatabaseReconciler) checkPodStatus(ctx context.Context, database *datab
 	}
 
 	if len(podList.Items) == 0 {
-		return fmt.Errorf("no pods found for database %s", database.Name)
+		// No pods yet - this is normal during initial creation
+		// Don't treat as an error, just return nil
+		return nil
 	}
 
 	// Check each pod for pending status or errors
 	var podErrors []string
 	for _, pod := range podList.Items {
+		podHasError := false
 		if pod.Status.Phase == corev1.PodPending {
 			// Check container statuses for detailed error information
 			for _, containerStatus := range pod.Status.ContainerStatuses {
@@ -1034,6 +1037,7 @@ func (r *DatabaseReconciler) checkPodStatus(ctx context.Context, database *datab
 					message := containerStatus.State.Waiting.Message
 					podErrors = append(podErrors, fmt.Sprintf("Pod %s: Container %s is waiting - %s: %s",
 						pod.Name, containerStatus.Name, reason, message))
+					podHasError = true
 				}
 			}
 
@@ -1044,6 +1048,7 @@ func (r *DatabaseReconciler) checkPodStatus(ctx context.Context, database *datab
 					message := initStatus.State.Waiting.Message
 					podErrors = append(podErrors, fmt.Sprintf("Pod %s: Init container %s is waiting - %s: %s",
 						pod.Name, initStatus.Name, reason, message))
+					podHasError = true
 				}
 			}
 
@@ -1052,11 +1057,12 @@ func (r *DatabaseReconciler) checkPodStatus(ctx context.Context, database *datab
 				if condition.Status == corev1.ConditionFalse && condition.Reason != "" {
 					podErrors = append(podErrors, fmt.Sprintf("Pod %s: %s - %s: %s",
 						pod.Name, condition.Type, condition.Reason, condition.Message))
+					podHasError = true
 				}
 			}
 
-			// If no specific errors found but pod is pending, add generic message
-			if len(podErrors) == 0 {
+			// If no specific errors found for this pod but it's pending, add generic message
+			if !podHasError {
 				podErrors = append(podErrors, fmt.Sprintf("Pod %s is pending without specific error details", pod.Name))
 			}
 		} else if pod.Status.Phase == corev1.PodFailed {
