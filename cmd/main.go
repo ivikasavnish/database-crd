@@ -17,8 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -31,6 +34,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -52,6 +56,80 @@ func init() {
 
 	utilruntime.Must(databasesv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+}
+
+// DatabaseUsageStats represents usage statistics for databases
+type DatabaseUsageStats struct {
+	TotalDatabases int            `json:"total_databases"`
+	ByType         map[string]int `json:"by_type"`
+	ByPhase        map[string]int `json:"by_phase"`
+	Databases      []DatabaseInfo `json:"databases"`
+}
+
+// DatabaseInfo represents information about a single database
+type DatabaseInfo struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Type      string `json:"type"`
+	Version   string `json:"version"`
+	Phase     string `json:"phase"`
+	Replicas  int32  `json:"replicas"`
+	Ready     int32  `json:"ready"`
+}
+
+// setupUsageEndpoint sets up an HTTP endpoint to expose database usage statistics
+func setupUsageEndpoint(mgr ctrl.Manager) error {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.Background()
+
+		// Fetch all databases
+		var databaseList databasesv1alpha1.DatabaseList
+		if err := mgr.GetClient().List(ctx, &databaseList, &client.ListOptions{}); err != nil {
+			http.Error(w, "Failed to list databases", http.StatusInternalServerError)
+			return
+		}
+
+		// Compute statistics
+		stats := DatabaseUsageStats{
+			TotalDatabases: len(databaseList.Items),
+			ByType:         make(map[string]int),
+			ByPhase:        make(map[string]int),
+			Databases:      make([]DatabaseInfo, 0, len(databaseList.Items)),
+		}
+
+		for _, db := range databaseList.Items {
+			// Count by type
+			stats.ByType[string(db.Spec.Type)]++
+
+			// Count by phase
+			stats.ByPhase[string(db.Status.Phase)]++
+
+			// Add database info
+			replicas := int32(1)
+			if db.Spec.Replicas != nil {
+				replicas = *db.Spec.Replicas
+			}
+
+			stats.Databases = append(stats.Databases, DatabaseInfo{
+				Name:      db.Name,
+				Namespace: db.Namespace,
+				Type:      string(db.Spec.Type),
+				Version:   db.Spec.Version,
+				Phase:     string(db.Status.Phase),
+				Replicas:  replicas,
+				Ready:     db.Status.ReadyReplicas,
+			})
+		}
+
+		// Return JSON response
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(stats); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
+	})
+
+	// Register the handler with the manager
+	return mgr.AddMetricsServerExtraHandler("/usage", handler)
 }
 
 // nolint:gocyclo
@@ -233,6 +311,12 @@ func main() {
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	// Add usage statistics endpoint
+	if err := setupUsageEndpoint(mgr); err != nil {
+		setupLog.Error(err, "unable to set up usage endpoint")
 		os.Exit(1)
 	}
 

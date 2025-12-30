@@ -221,6 +221,15 @@ spec:
                     description: Memory resource limit
                     type: string
                 type: object
+              serviceType:
+                default: NodePort
+                description: ServiceType specifies the type of service to create (ClusterIP,
+                  NodePort, LoadBalancer)
+                enum:
+                - ClusterIP
+                - NodePort
+                - LoadBalancer
+                type: string
               sqlite:
                 description: SQLite specific configuration
                 properties:
