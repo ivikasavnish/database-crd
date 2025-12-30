@@ -57,6 +57,8 @@ type DatabaseReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -113,6 +115,14 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Error(err, "Failed to reconcile database")
 		r.updateStatusOnError(ctx, database, err)
 		return ctrl.Result{RequeueAfter: time.Minute}, err
+	}
+
+	// Check pod status and update database status with any errors
+	if err := r.checkPodStatus(ctx, database); err != nil {
+		log.Error(err, "Pod status check failed")
+		// Continue even if pod status check fails, but update status
+		r.updateStatusOnError(ctx, database, err)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
 
 	// Update status to Ready
@@ -173,6 +183,12 @@ func (r *DatabaseReconciler) reconcileService(ctx context.Context, database *dat
 
 	ports := r.getServicePorts(database)
 
+	// Determine service type - default to NodePort if not specified
+	serviceType := corev1.ServiceTypeNodePort
+	if database.Spec.ServiceType != "" {
+		serviceType = corev1.ServiceType(database.Spec.ServiceType)
+	}
+
 	if err != nil && errors.IsNotFound(err) {
 		// Create the service
 		service = &corev1.Service{
@@ -184,7 +200,7 @@ func (r *DatabaseReconciler) reconcileService(ctx context.Context, database *dat
 			Spec: corev1.ServiceSpec{
 				Selector: r.getLabels(database),
 				Ports:    ports,
-				Type:     corev1.ServiceTypeClusterIP,
+				Type:     serviceType,
 			},
 		}
 
@@ -987,6 +1003,83 @@ func (r *DatabaseReconciler) updateStatusOnError(ctx context.Context, database *
 	meta.SetStatusCondition(&database.Status.Conditions, condition)
 
 	_ = r.Status().Update(ctx, database)
+}
+
+func (r *DatabaseReconciler) checkPodStatus(ctx context.Context, database *databasesv1alpha1.Database) error {
+	log := log.FromContext(ctx)
+
+	// List pods with matching labels
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(database.Namespace),
+		client.MatchingLabels(r.getLabels(database)),
+	}
+
+	if err := r.List(ctx, podList, listOpts...); err != nil {
+		return fmt.Errorf("failed to list pods: %w", err)
+	}
+
+	if len(podList.Items) == 0 {
+		// No pods yet - this is normal during initial creation
+		// Don't treat as an error, just return nil
+		return nil
+	}
+
+	// Check each pod for pending status or errors
+	var podErrors []string
+	for _, pod := range podList.Items {
+		podHasError := false
+		if pod.Status.Phase == corev1.PodPending {
+			// Check container statuses for detailed error information
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				if containerStatus.State.Waiting != nil {
+					reason := containerStatus.State.Waiting.Reason
+					message := containerStatus.State.Waiting.Message
+					podErrors = append(podErrors, fmt.Sprintf("Pod %s: Container %s is waiting - %s: %s",
+						pod.Name, containerStatus.Name, reason, message))
+					podHasError = true
+				}
+			}
+
+			// Check init container statuses
+			for _, initStatus := range pod.Status.InitContainerStatuses {
+				if initStatus.State.Waiting != nil {
+					reason := initStatus.State.Waiting.Reason
+					message := initStatus.State.Waiting.Message
+					podErrors = append(podErrors, fmt.Sprintf("Pod %s: Init container %s is waiting - %s: %s",
+						pod.Name, initStatus.Name, reason, message))
+					podHasError = true
+				}
+			}
+
+			// Check pod conditions for more details
+			for _, condition := range pod.Status.Conditions {
+				if condition.Status == corev1.ConditionFalse && condition.Reason != "" {
+					podErrors = append(podErrors, fmt.Sprintf("Pod %s: %s - %s: %s",
+						pod.Name, condition.Type, condition.Reason, condition.Message))
+					podHasError = true
+				}
+			}
+
+			// If no specific errors found for this pod but it's pending, add generic message
+			if !podHasError {
+				podErrors = append(podErrors, fmt.Sprintf("Pod %s is pending without specific error details", pod.Name))
+			}
+		} else if pod.Status.Phase == corev1.PodFailed {
+			podErrors = append(podErrors, fmt.Sprintf("Pod %s is in Failed state: %s", pod.Name, pod.Status.Message))
+		}
+	}
+
+	if len(podErrors) > 0 {
+		errorMsg := fmt.Sprintf("Pod issues detected: %s", podErrors[0])
+		if len(podErrors) > 1 {
+			errorMsg += fmt.Sprintf(" (and %d more issues)", len(podErrors)-1)
+		}
+		log.Info("Pod status check found issues", "errors", podErrors)
+		return fmt.Errorf("%s", errorMsg)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

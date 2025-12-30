@@ -21,6 +21,8 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - events
+  - pods
   - secrets
   verbs:
   - get

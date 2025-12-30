@@ -84,6 +84,12 @@ type DatabaseSpec struct {
 	// Environment variables to set in the database container
 	// +optional
 	Env []EnvVar `json:"env,omitempty"`
+
+	// ServiceType specifies the type of service to create (ClusterIP, NodePort, LoadBalancer)
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	// +kubebuilder:default=NodePort
+	// +optional
+	ServiceType string `json:"serviceType,omitempty"`
 }
 
 // StorageSpec defines the storage configuration
